@@ -24,7 +24,7 @@ lu.LuaUnit:setOutputType('JUNIT')
 lu.LuaUnit.fname = "var/jUnitResults.xml"
 
 _AFT = {
-	context = _ctx,
+	context = nil,
 	tests_list = {},
 	event_history = false,
 	monitored_events = {},
@@ -36,6 +36,18 @@ end
 
 function _AFT.setJunitFile(filePath)
 	lu.LuaUnit.fname = filePath
+end
+
+function _AFT.timeoutControl(timeout, query, cb)
+	-- create a timer
+	local myTimer = {
+		["uid"]= AFB:getuid(_AFT.context),
+		["delay"]= timeout * 1000,
+		["count"]=1,
+	}
+
+	-- arm a timer and provide client query as callback context
+	local errcode, timerfd = AFB:timerset (_AFT.context, myTimer, cb, query)
 end
 
 --[[
@@ -84,7 +96,7 @@ function _AFT.requestDaemonEventHandler(eventObj)
 	local eventName = eventObj.data.message
 	local log = _AFT.monitored_events[eventName]
 	local api = nil
-
+	print(log.api, api)
 	if eventObj.daemon then
 		api = eventObj.daemon.api
 	elseif eventObj.request then
@@ -114,6 +126,7 @@ function _AFT.bindingEventHandler(eventObj)
 end
 
 function _evt_catcher_ (source, action, eventObj)
+	print(Dump_Table(eventObj))
 	if eventObj.type == "event" then
 		_AFT.bindingEventHandler(eventObj)
 	elseif eventObj.type == "daemon" or eventObj.type == "request" then
@@ -125,24 +138,28 @@ end
   Assert and test functions about the event part.
 ]]
 
-function _AFT.assertEvtReceived(eventName)
+function _AFT.assertEvtReceivedCB(eventName)
 	local count = 0
 	if _AFT.monitored_events[eventName].receivedCount then
 		count = _AFT.monitored_events[eventName].receivedCount
 	end
 
 	_AFT.assertIsTrue(count > 0, "No event '".. eventName .."' received")
+end
 
-	if _AFT.monitored_events[eventName].cb then
-		local data_n = #_AFT.monitored_events[eventName].data
-		_AFT.monitored_events[eventName].cb(eventName, _AFT.monitored_events[eventName].data[data_n])
+function _AFT.assertEvtReceived(eventName, timeout)
+	if timeout then
+		_AFT.timeoutControl(timeout, eventName, function()
+			_AFT.assertEvtReceivedCB(eventName)
+		end)
+	else
+		_AFT.assertEvtReceivedCB(eventName)
 	end
 end
 
 function _AFT.testEvtReceived(testName, eventName, timeout)
 	table.insert(_AFT.tests_list, {testName, function()
-		if timeout then sleep(timeout) end
-		_AFT.assertEvtReceived(eventName)
+		_AFT.assertEvtReceived(eventName, timeout)
 	end})
 end
 
@@ -405,7 +422,7 @@ end
 function _launch_test(context, args)
 	_AFT.context = context
 	AFB:servsync(_AFT.context, "monitor", "set", { verbosity = "debug" })
-	AFB:servsync(_AFT.context, "monitor", "trace", { add = { api = args.trace, request = "vverbose", daemon = "vverbose", event = "push_after" }})
+	AFB:servsync(_AFT.context, "monitor", "trace", { add = { api = args.api, request = "vverbose", daemon = "vverbose", event = "push_after" }})
 	for _,f in pairs(args.files) do
 		dofile('var/'..f)
 	end

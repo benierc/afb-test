@@ -7,7 +7,7 @@
         "api": "test",
         "info": "Binding made to tests other bindings",
         "require": [
-            "hello"
+            "low-can"
         ]
     },
     "onload": {
@@ -15,8 +15,8 @@
         "info": "Launch all the tests",
         "action": "lua://AFT#_launch_test",
         "args": {
-            "trace": "hello",
-            "files": ["helloworld.lua"]
+            "trace": "low-can",
+            "files": ["low-can-tests.lua"]
         }
     }
 }

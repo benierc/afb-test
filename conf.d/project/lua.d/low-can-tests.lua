@@ -31,11 +31,12 @@ _AFT.testCustom("Test_turning_on", function()
     _AFT.assertVerb("low-can","subscribe", { event = "diagnostic_messages.engine.speed" })
 
     local evt = "low-can/diagnostic_messages"
-    _AFT.addEventToMonitor(evt)
+    _AFT.addEventToMonitor(evt, function(eventName, data)
+        _AFT.assertIsTrue(data.name == "diagnostic_messages.engine.speed")
+    end)
+
     local ret = os.execute("./var/replay_launcher.sh ./var/test1.canreplay")
     _AFT.assertIsTrue(ret)
 
-    _AFT.assertEvtReceived(evt, function(eventName, data)
-        _AFT.assertIsTrue(data.name == "diagnostic_messages.engine.speed")
-    end)
+    _AFT.assertEvtReceived(evt, 60)
 end)
