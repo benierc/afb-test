@@ -24,10 +24,11 @@ lu.LuaUnit:setOutputType('JUNIT')
 lu.LuaUnit.fname = "var/jUnitResults.xml"
 
 _AFT = {
-	context = _ctx,
+	context = nil,
 	tests_list = {},
 	event_history = false,
 	monitored_events = {},
+	myTimer = {count=0},
 }
 
 function _AFT.enableEventHistory()
@@ -36,6 +37,18 @@ end
 
 function _AFT.setJunitFile(filePath)
 	lu.LuaUnit.fname = filePath
+end
+
+function _AFT.timeoutControl(timeout, query, cb)
+	-- create a timer
+	_AFT.myTimer = {
+		["uid"]= AFB:getuid(_AFT.context),
+		["delay"]= 1000,
+		["count"]= timeout,
+	}
+
+	-- arm a timer and provide client query as callback context
+	local errcode, timerfd = AFB:timerset (_AFT.context, _AFT.myTimer, cb, query)
 end
 
 --[[
@@ -52,11 +65,11 @@ end
 ]]
 
 function _AFT.addEventToMonitor(eventName, callback)
-	_AFT.monitored_events[eventName] = { cb = callback }
+	_AFT.monitored_events[eventName] = { cb = callback, startTime = os.time() }
 end
 
 function _AFT.addLogToMonitor(api, type, message, callback)
-	_AFT.monitored_events[message] = { api = api, type = type, cb = callback }
+	_AFT.monitored_events[message] = { api = api, type = type, cb = callback, startTime = os.time() }
 end
 
 function _AFT.incrementCount(dict)
@@ -125,24 +138,26 @@ end
   Assert and test functions about the event part.
 ]]
 
-function _AFT.assertEvtReceived(eventName)
+function _assertEvtReceivedCB(eventName)
 	local count = 0
 	if _AFT.monitored_events[eventName].receivedCount then
 		count = _AFT.monitored_events[eventName].receivedCount
 	end
 
 	_AFT.assertIsTrue(count > 0, "No event '".. eventName .."' received")
+end
 
-	if _AFT.monitored_events[eventName].cb then
-		local data_n = #_AFT.monitored_events[eventName].data
-		_AFT.monitored_events[eventName].cb(eventName, _AFT.monitored_events[eventName].data[data_n])
+function _AFT.assertEvtReceived(eventName, timeout)
+	if timeout then
+		_AFT.timeoutControl(timeout, eventName, "_assertEvtReceivedCB")
+	else
+		_assertEvtReceivedCB(eventName)
 	end
 end
 
 function _AFT.testEvtReceived(testName, eventName, timeout)
 	table.insert(_AFT.tests_list, {testName, function()
-		if timeout then sleep(timeout) end
-		_AFT.assertEvtReceived(eventName)
+		_AFT.assertEvtReceived(eventName, timeout)
 	end})
 end
 
@@ -249,71 +264,19 @@ local luaunit_list_of_assert = {
 	'assertIsTable',
 	'assertIsBoolean',
 	'assertIsNil',
-	'assertIsTrue',
-	'assertIsFalse',
-	'assertIsNaN',
-	'assertIsInf',
-	'assertIsPlusInf',
-	'assertIsMinusInf',
-	'assertIsPlusZero',
-	'assertIsMinusZero',
 	'assertIsFunction',
 	'assertIsThread',
 	'assertIsUserdata',
-
-	-- type assertions: assertIsXXX -> assertXxx
-	'assertIsNumber',
-	'assertIsString',
-	'assertIsTable',
-	'assertIsBoolean',
-	'assertIsNil',
+	'assertTrue',
+	'assertFalse',
 	'assertIsTrue',
 	'assertIsFalse',
-	'assertIsNaN',
-	'assertIsInf',
-	'assertIsPlusInf',
-	'assertIsMinusInf',
-	'assertIsPlusZero',
-	'assertIsMinusZero',
-	'assertIsFunction',
-	'assertIsThread',
-	'assertIsUserdata',
-
-	-- type assertions: assertIsXXX -> assert_xxx (luaunit v2 compat)
-	'assertIsNumber',
-	'assertIsString',
-	'assertIsTable',
-	'assertIsBoolean',
-	'assertIsNil',
-	'assertIsTrue',
-	'assertIsFalse',
-	'assertIsNaN',
-	'assertIsInf',
-	'assertIsPlusInf',
-	'assertIsMinusInf',
-	'assertIsPlusZero',
-	'assertIsMinusZero',
-	'assertIsFunction',
-	'assertIsThread',
-	'assertIsUserdata',
-
-	-- type assertions: assertNotIsXXX -> assert_not_is_xxx
-	'assertNotIsNumber',
-	'assertNotIsString',
-	'assertNotIsTable',
-	'assertNotIsBoolean',
-	'assertNotIsNil',
-	'assertNotIsTrue',
-	'assertNotIsFalse',
-	'assertNotIsNaN',
-	'assertNotIsInf',
-	'assertNotIsPlusInf',
-	'assertNotIsMinusInf',
-	'assertNotIsPlusZero',
-	'assertNotIsMinusZero',
-	'assertNotIsFunction',
-	'assertNotIsThread',
-	'assertNotIsUserdata',
+	'assertNaN',
+	'assertInf',
+	'assertPlusInf',
+	'assertMinusInf',
+	'assertPlusZero',
+	'assertMinusZero',
 
 	-- type assertions: assertNotIsXXX -> assertNotXxx (luaunit v2 compat)
 	'assertNotIsNumber',
@@ -332,34 +295,6 @@ local luaunit_list_of_assert = {
 	'assertNotIsFunction',
 	'assertNotIsThread',
 	'assertNotIsUserdata',
-
-	-- type assertions: assertNotIsXXX -> assert_not_xxx
-	'assertNotIsNumber',
-	'assertNotIsString',
-	'assertNotIsTable',
-	'assertNotIsBoolean',
-	'assertNotIsNil',
-	'assertNotIsTrue',
-	'assertNotIsFalse',
-	'assertNotIsNaN',
-	'assertNotIsInf',
-	'assertNotIsPlusInf',
-	'assertNotIsMinusInf',
-	'assertNotIsPlusZero',
-	'assertNotIsMinusZero',
-	'assertNotIsFunction',
-	'assertNotIsThread',
-	'assertNotIsUserdata',
-
-	-- all assertions with Coroutine duplicate Thread assertions
-	'assertIsThread',
-	'assertIsThread',
-	'assertIsThread',
-	'assertIsThread',
-	'assertNotIsThread',
-	'assertNotIsThread',
-	'assertNotIsThread',
-	'assertNotIsThread',
 }
 
 local luaunit_list_of_functions = {
