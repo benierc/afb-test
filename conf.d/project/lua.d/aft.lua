@@ -28,7 +28,6 @@ _AFT = {
 	tests_list = {},
 	event_history = false,
 	monitored_events = {},
-	myTimer = {count=0},
 }
 
 function _AFT.enableEventHistory()
@@ -37,18 +36,6 @@ end
 
 function _AFT.setJunitFile(filePath)
 	lu.LuaUnit.fname = filePath
-end
-
-function _AFT.timeoutControl(timeout, query, cb)
-	-- create a timer
-	_AFT.myTimer = {
-		["uid"]= AFB:getuid(_AFT.context),
-		["delay"]= 1000,
-		["count"]= timeout,
-	}
-
-	-- arm a timer and provide client query as callback context
-	local errcode, timerfd = AFB:timerset (_AFT.context, _AFT.myTimer, cb, query)
 end
 
 --[[
@@ -64,12 +51,12 @@ end
   subscribed listeners.
 ]]
 
-function _AFT.addEventToMonitor(eventName, callback)
-	_AFT.monitored_events[eventName] = { cb = callback }
+function _AFT.addEventToMonitor(eventName, timeout, callback)
+	_AFT.monitored_events[eventName] = { cb = callback, timeout = timeout, startTime = os.time() }
 end
 
-function _AFT.addLogToMonitor(api, type, message, callback)
-	_AFT.monitored_events[message] = { api = api, type = type, cb = callback }
+function _AFT.addLogToMonitor(api, type, message, timeout, callback)
+	_AFT.monitored_events[message] = { api = api, type = type, cb = callback, timeout = timeout, startTime = os.time() }
 end
 
 function _AFT.incrementCount(dict)
@@ -119,10 +106,13 @@ function _AFT.bindingEventHandler(eventObj)
 	eventObj.data.result = nil
 
 	if type(_AFT.monitored_events[eventName]) == 'table' then
-		_AFT.monitored_events[eventName].eventListeners = eventListeners
+		local timeout = _AFT.monitored_events[eventName].timeout
+		local spendTime = os.time() - _AFT.monitored_events[eventName].startTime
 
+		_AFT.monitored_events[eventName].eventListeners = eventListeners
 		_AFT.incrementCount(_AFT.monitored_events[eventName])
 		_AFT.registerData(_AFT.monitored_events[eventName], eventObj.data)
+		_AFT.assertIsTrue( spendTime <= timeout, "Timeout: ".. tostring(timeout) .. ". Event ".. eventName .. "not receive in time.")
 	end
 end
 
@@ -138,28 +128,22 @@ end
   Assert and test functions about the event part.
 ]]
 
-function _AFT.assertEvtReceivedCB(eventName)
-	local count = 0
-	if _AFT.monitored_events[eventName].receivedCount then
-		count = _AFT.monitored_events[eventName].receivedCount
-	end
-
-	_AFT.assertIsTrue(count > 0, "No event '".. eventName .."' received")
-end
-
-function _AFT.assertEvtReceived(eventName, timeout)
+function _AFT.assertEvtReceived(eventName)
+	local timeout = _AFT.monitored_events[eventName].timeout
 	if timeout then
-		_AFT.timeoutControl(timeout, eventName, function()
-			_AFT.assertEvtReceivedCB(eventName)
-		end)
-	else
-		_AFT.assertEvtReceivedCB(eventName)
+		_AFT.assertIsTrue( os.time() - _AFT.monitored_events[eventName].startTime <= timeout, "Timeout: ".. tostring(timeout) .. ". Event ".. eventName .. "not receive in time.")
+
+		-- Wait end of timeout for receiving the desired event.
+		while os.time() - _AFT.monitored_events[eventName].startTime <= timeout and not _AFT.monitored_events[eventName].receivedCount do end
 	end
+
+	_AFT.assertIsNumber(_AFT.monitored_events[eventName].receivedCount)
+	_AFT.assertIsTrue(_AFT.monitored_events[eventName].receivedCount > 0, "No event '".. eventName .."' received")
 end
 
-function _AFT.testEvtReceived(testName, eventName, timeout)
+function _AFT.testEvtReceived(testName, eventName)
 	table.insert(_AFT.tests_list, {testName, function()
-		_AFT.assertEvtReceived(eventName, timeout)
+		_AFT.assertEvtReceived(eventName)
 	end})
 end
 
