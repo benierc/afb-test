@@ -28,6 +28,7 @@ _AFT = {
 	tests_list = {},
 	event_history = false,
 	monitored_events = {},
+	myTimer = {count=0},
 }
 
 function _AFT.enableEventHistory()
@@ -40,14 +41,14 @@ end
 
 function _AFT.timeoutControl(timeout, query, cb)
 	-- create a timer
-	local myTimer = {
+	_AFT.myTimer = {
 		["uid"]= AFB:getuid(_AFT.context),
-		["delay"]= timeout * 1000,
-		["count"]=1,
+		["delay"]= 1000,
+		["count"]= timeout,
 	}
 
 	-- arm a timer and provide client query as callback context
-	local errcode, timerfd = AFB:timerset (_AFT.context, myTimer, cb, query)
+	local errcode, timerfd = AFB:timerset (_AFT.context, _AFT.myTimer, cb, query)
 end
 
 --[[
@@ -96,7 +97,7 @@ function _AFT.requestDaemonEventHandler(eventObj)
 	local eventName = eventObj.data.message
 	local log = _AFT.monitored_events[eventName]
 	local api = nil
-	print(log.api, api)
+
 	if eventObj.daemon then
 		api = eventObj.daemon.api
 	elseif eventObj.request then
@@ -126,7 +127,6 @@ function _AFT.bindingEventHandler(eventObj)
 end
 
 function _evt_catcher_ (source, action, eventObj)
-	print(Dump_Table(eventObj))
 	if eventObj.type == "event" then
 		_AFT.bindingEventHandler(eventObj)
 	elseif eventObj.type == "daemon" or eventObj.type == "request" then
@@ -266,71 +266,19 @@ local luaunit_list_of_assert = {
 	'assertIsTable',
 	'assertIsBoolean',
 	'assertIsNil',
-	'assertIsTrue',
-	'assertIsFalse',
-	'assertIsNaN',
-	'assertIsInf',
-	'assertIsPlusInf',
-	'assertIsMinusInf',
-	'assertIsPlusZero',
-	'assertIsMinusZero',
 	'assertIsFunction',
 	'assertIsThread',
 	'assertIsUserdata',
-
-	-- type assertions: assertIsXXX -> assertXxx
-	'assertIsNumber',
-	'assertIsString',
-	'assertIsTable',
-	'assertIsBoolean',
-	'assertIsNil',
+	'assertTrue',
+	'assertFalse',
 	'assertIsTrue',
 	'assertIsFalse',
-	'assertIsNaN',
-	'assertIsInf',
-	'assertIsPlusInf',
-	'assertIsMinusInf',
-	'assertIsPlusZero',
-	'assertIsMinusZero',
-	'assertIsFunction',
-	'assertIsThread',
-	'assertIsUserdata',
-
-	-- type assertions: assertIsXXX -> assert_xxx (luaunit v2 compat)
-	'assertIsNumber',
-	'assertIsString',
-	'assertIsTable',
-	'assertIsBoolean',
-	'assertIsNil',
-	'assertIsTrue',
-	'assertIsFalse',
-	'assertIsNaN',
-	'assertIsInf',
-	'assertIsPlusInf',
-	'assertIsMinusInf',
-	'assertIsPlusZero',
-	'assertIsMinusZero',
-	'assertIsFunction',
-	'assertIsThread',
-	'assertIsUserdata',
-
-	-- type assertions: assertNotIsXXX -> assert_not_is_xxx
-	'assertNotIsNumber',
-	'assertNotIsString',
-	'assertNotIsTable',
-	'assertNotIsBoolean',
-	'assertNotIsNil',
-	'assertNotIsTrue',
-	'assertNotIsFalse',
-	'assertNotIsNaN',
-	'assertNotIsInf',
-	'assertNotIsPlusInf',
-	'assertNotIsMinusInf',
-	'assertNotIsPlusZero',
-	'assertNotIsMinusZero',
-	'assertNotIsFunction',
-	'assertNotIsThread',
-	'assertNotIsUserdata',
+	'assertNaN',
+	'assertInf',
+	'assertPlusInf',
+	'assertMinusInf',
+	'assertPlusZero',
+	'assertMinusZero',
 
 	-- type assertions: assertNotIsXXX -> assertNotXxx (luaunit v2 compat)
 	'assertNotIsNumber',
@@ -349,34 +297,6 @@ local luaunit_list_of_assert = {
 	'assertNotIsFunction',
 	'assertNotIsThread',
 	'assertNotIsUserdata',
-
-	-- type assertions: assertNotIsXXX -> assert_not_xxx
-	'assertNotIsNumber',
-	'assertNotIsString',
-	'assertNotIsTable',
-	'assertNotIsBoolean',
-	'assertNotIsNil',
-	'assertNotIsTrue',
-	'assertNotIsFalse',
-	'assertNotIsNaN',
-	'assertNotIsInf',
-	'assertNotIsPlusInf',
-	'assertNotIsMinusInf',
-	'assertNotIsPlusZero',
-	'assertNotIsMinusZero',
-	'assertNotIsFunction',
-	'assertNotIsThread',
-	'assertNotIsUserdata',
-
-	-- all assertions with Coroutine duplicate Thread assertions
-	'assertIsThread',
-	'assertIsThread',
-	'assertIsThread',
-	'assertIsThread',
-	'assertNotIsThread',
-	'assertNotIsThread',
-	'assertNotIsThread',
-	'assertNotIsThread',
 }
 
 local luaunit_list_of_functions = {
@@ -422,7 +342,7 @@ end
 function _launch_test(context, args)
 	_AFT.context = context
 	AFB:servsync(_AFT.context, "monitor", "set", { verbosity = "debug" })
-	AFB:servsync(_AFT.context, "monitor", "trace", { add = { api = args.api, request = "vverbose", daemon = "vverbose", event = "push_after" }})
+	AFB:servsync(_AFT.context, "monitor", "trace", { add = { api = args.trace, request = "vverbose", daemon = "vverbose", event = "push_after" }})
 	for _,f in pairs(args.files) do
 		dofile('var/'..f)
 	end
