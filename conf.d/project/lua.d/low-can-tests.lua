@@ -19,23 +19,31 @@
     NOTE: strict mode: every global variables should be prefixed by '_'
 --]]
 
+_AFT.assertVerbStatusSuccess("low-can", "list", {})
+_AFT.assertVerbStatusSuccess("low-can", "get", { event = "diagnostic_messages.engine.speed"})
+
 _AFT.testCustom("Test_detection_is_off", function()
     local logMsg = "signal: Engine is off, diagnostic_messages.engine.speed won't received responses until it's on"
     _AFT.addLogToMonitor("low-can", "warning", logMsg)
 
-    _AFT.assertVerb("low-can","subscribe", { event = "diagnostic_messages.engine.speed" })
+    _AFT.assertVerbStatusSuccess("low-can","subscribe", { event = "diagnostic_messages.engine.speed" })
     _AFT.assertLogReceived(logMsg)
 end)
 
 _AFT.testCustom("Test_turning_on", function()
-    _AFT.assertVerb("low-can","subscribe", { event = "diagnostic_messages.engine.speed" })
+    _AFT.assertVerbStatusSuccess("low-can","subscribe", { event = "diagnostic_messages.engine.speed" })
 
     local evt = "low-can/diagnostic_messages"
+    local logMsg = "signal: Engine is off, diagnostic_messages.engine.speed won't received responses until it's on"
+    _AFT.addLogToMonitor("low-can", "warning", logMsg)
     _AFT.addEventToMonitor(evt)
+
     local ret = os.execute("./var/replay_launcher.sh ./var/test1.canreplay")
     _AFT.assertIsTrue(ret)
 
     _AFT.assertEvtReceived(evt, function(eventName, data)
         _AFT.assertIsTrue(data.name == "diagnostic_messages.engine.speed")
     end)
+
+    _AFT.assertLogNotReceived(logMsg)
 end)
