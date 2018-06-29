@@ -17,41 +17,71 @@
  */
 
 #include <fapis.h>
+#include <ctl-plugin.h>
+
+struct fapisHandleT {
+	AFB_ApiT mainApiHandle;
+	CtlSectionT *section;
+	json_object *fapiJ;
+	json_object *verbsJ;
+};
 
 static int LoadOneFapi(void *data, AFB_ApiT apiHandle)
 {
-	CtlActionT *actions = NULL;
-	json_object* verbsJ = (json_object*) data;
+	struct fapisHandleT *fapisHandle = (struct fapisHandleT*)data;
 
-	actions = ActionConfig(apiHandle, verbsJ, 1);
+	if(PluginConfig(apiHandle, fapisHandle->section, fapisHandle->fapiJ)) {
+		AFB_ApiError(apiHandle, "Problem loading the plugin as an API for %s, see log message above", json_object_get_string(fapisHandle->fapiJ));
+		return -1;
+	}
+
+	// declare the verbs for this API
+	if(! ActionConfig(apiHandle, fapisHandle->verbsJ, 1)) {
+		AFB_ApiError(apiHandle, "Problems at verbs creations for %s", json_object_get_string(fapisHandle->fapiJ));
+		return -1;
+	}
+	// declare an event event manager for this API;
+	afb_dynapi_on_event(apiHandle, CtrlDispatchApiEvent);
 
 	return 0;
 }
 
-static void OneFapiConfig(void  *data, json_object *fapiJ) {
-	const char *uid = NULL, *info = NULL, *spath = NULL;
-	json_object *verbsJ = NULL, *filesJ = NULL, *luaJ = NULL;
+static void OneFapiConfig(void *data, json_object *fapiJ) {
+	const char *uid = NULL, *info = NULL;
 
-	AFB_ApiT apiHandle = (AFB_ApiT)data;
+	struct fapisHandleT *fapisHandle = (struct fapisHandleT*)data;
 
-	if(wrap_json_unpack(fapiJ, "{ss,s?s,s?s,so,s?o,so !}",
+	if(fapiJ) {
+		if(wrap_json_unpack(fapiJ, "{ss,s?s,s?s,so,s?o,so !}",
 					"uid", &uid,
 					"info", &info,
-					"spath", &spath,
-					"libs", &filesJ,
-					"lua", &luaJ,
-					"verbs", &verbsJ)) {
-		AFB_ApiError(apiHandle, "Wrong fapis specification, missing uid|[info]|[spath]|libs|[lua]|verbs");
+					"spath", NULL,
+					"libs", NULL,
+					"lua", NULL,
+					"verbs", &fapisHandle->verbsJ)) {
+		AFB_ApiError(fapisHandle->mainApiHandle, "Wrong fapis specification, missing uid|[info]|[spath]|libs|[lua]|verbs");
 		return;
-	}
+		}
 
-	if (afb_dynapi_new_api(apiHandle, uid, info, 1, LoadOneFapi, )) {
-		AFB_ApiError(apiHandle, "Error creating new api: %s", uid);
-		return;
+		json_object_get(fapisHandle->verbsJ);
+		json_object_object_del(fapiJ, "verbs");
+		fapisHandle->fapiJ = fapiJ;
+
+		if (afb_dynapi_new_api(fapisHandle->mainApiHandle, uid, info, 1, LoadOneFapi, (void*)fapisHandle)) {
+			AFB_ApiError(fapisHandle->mainApiHandle, "Error creating new api: %s", uid);
+			return;
+		}
 	}
 }
 
 int FapisConfig(AFB_ApiT apiHandle, CtlSectionT *section, json_object *fapisJ) {
-	if(! PluginConfig(apiHandle, section, fapisJ))
-		wrap_json_optarray_for_all(fapisJ, OneFapiConfig, (void*)apiHandle);
+	struct fapisHandleT fapisHandle = {
+		.mainApiHandle = apiHandle,
+		.section = section,
+		.fapiJ = NULL,
+		.verbsJ = NULL
+	};
+	wrap_json_optarray_for_all(fapisJ, OneFapiConfig, (void*)&fapisHandle);
+
+	return 0;
 }

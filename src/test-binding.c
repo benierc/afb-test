@@ -114,7 +114,7 @@ int afbBindingVdyn(afb_dynapi *apiHandle) {
 	if (!dirList)
 		dirList = CONTROL_CONFIG_PATH;
 
-	configPath = CtlConfigSearch(apiHandle, dirList, "");
+	configPath = CtlConfigSearch(apiHandle, dirList, "aft");
 	if (!configPath) {
 		AFB_ApiError(apiHandle, "CtlPreInit: No %s* config found in %s ", GetBinderName(), dirList);
 		return ERROR;
